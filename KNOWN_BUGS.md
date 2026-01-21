@@ -159,3 +159,21 @@ unzip -l seo-platform-vX.X.X.zip | grep "\.env$"
 - `app:create-primary-server` вместо `server:create-primary`
 **Файл:** `deploy.sh` строки 691, 695
 **Решение:** Исправлены имена команд
+
+### 10. Docker volume read-only ошибка (ИСПРАВЛЕНО v3.6.15)
+**Симптом:** "read-only file system" при запуске контейнеров
+**Причина:** Volume `build-data` монтировался в read-only директорию образа
+**Решение:** Использовать shared volume `app-public` между app и nginx
+**Файл:** `docker-compose.yml`
+
+### 11. Nginx не видит public директорию (ИСПРАВЛЕНО v3.6.15)
+**Симптом:** "realpath() /var/www/public failed (No such file or directory)"
+**Причина:** Nginx контейнер не имел доступа к файлам приложения
+**Решение:** Shared volume `app-public` между app и nginx
+**Файл:** `docker-compose.yml`, `docker/nginx/default.conf`
+
+### 12. unzip не установлен на чистом сервере (ИСПРАВЛЕНО v3.6.15)
+**Симптом:** "unzip: command not found"
+**Причина:** На чистой Ubuntu нет unzip
+**Решение:** Добавить установку в quick-install.sh
+**Файл:** `quick-install.sh`
