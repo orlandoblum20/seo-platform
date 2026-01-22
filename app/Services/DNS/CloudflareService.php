@@ -12,7 +12,12 @@ use Exception;
 class CloudflareService implements DnsServiceInterface
 {
     private const API_BASE = 'https://api.cloudflare.com/client/v4';
-    
+
+    // Коды ошибок которые считаем успехом
+    private const IGNORABLE_ERRORS = [
+        81058, // "An identical record already exists" - DNS запись уже есть
+    ];
+
     private string $apiKey;
     private ?string $email;
     private ?string $accountId;
@@ -27,7 +32,7 @@ class CloudflareService implements DnsServiceInterface
     /**
      * Make API request
      */
-    private function request(string $method, string $endpoint, array $data = []): array
+    private function request(string $method, string $endpoint, array $data = [], bool $throwOnError = true): array
     {
         $headers = [
             'Authorization' => "Bearer {$this->apiKey}",
@@ -54,7 +59,16 @@ class CloudflareService implements DnsServiceInterface
 
             if (!$response->successful() || !($result['success'] ?? false)) {
                 $errors = $result['errors'] ?? [['message' => 'Unknown error']];
-                throw new Exception('Cloudflare API Error: ' . json_encode($errors));
+                
+                if ($throwOnError) {
+                    throw new Exception('Cloudflare API Error: ' . json_encode($errors));
+                }
+                
+                return [
+                    'success' => false,
+                    'errors' => $errors,
+                    'result' => $result['result'] ?? null,
+                ];
             }
 
             return $result;
@@ -66,6 +80,27 @@ class CloudflareService implements DnsServiceInterface
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * Check if error code is ignorable (should be treated as success)
+     */
+    private function isIgnorableError(array $errors): bool
+    {
+        foreach ($errors as $error) {
+            if (in_array($error['code'] ?? 0, self::IGNORABLE_ERRORS)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get error code from errors array
+     */
+    private function getErrorCode(array $errors): ?int
+    {
+        return $errors[0]['code'] ?? null;
     }
 
     public function addDomain(string $domain): array
@@ -102,11 +137,11 @@ class CloudflareService implements DnsServiceInterface
     }
 
     public function createRecord(
-        string $zoneId, 
-        string $type, 
-        string $name, 
-        string $content, 
-        int $ttl = 300, 
+        string $zoneId,
+        string $type,
+        string $name,
+        string $content,
+        int $ttl = 300,
         bool $proxied = true
     ): string {
         $data = [
@@ -117,18 +152,77 @@ class CloudflareService implements DnsServiceInterface
             'proxied' => $proxied && in_array(strtoupper($type), ['A', 'AAAA', 'CNAME']),
         ];
 
-        $result = $this->request('post', "/zones/{$zoneId}/dns_records", $data);
+        // Делаем запрос без выброса исключения
+        $result = $this->request('post', "/zones/{$zoneId}/dns_records", $data, false);
 
-        return $result['result']['id'];
+        // Успешный запрос
+        if ($result['success'] ?? false) {
+            return $result['result']['id'];
+        }
+
+        $errors = $result['errors'] ?? [];
+        $errorCode = $this->getErrorCode($errors);
+
+        // Код 81058 - запись уже существует, находим её и возвращаем ID
+        if ($errorCode === 81058) {
+            Log::info('DNS record already exists, finding existing record', [
+                'zone_id' => $zoneId,
+                'type' => $type,
+                'name' => $name,
+            ]);
+
+            // Ищем существующую запись
+            $existingRecord = $this->findRecord($zoneId, $type, $name);
+            
+            if ($existingRecord) {
+                // Обновляем контент если отличается
+                if ($existingRecord['content'] !== $content) {
+                    $this->updateRecord($zoneId, $existingRecord['id'], $type, $name, $content, $ttl, $proxied);
+                }
+                return $existingRecord['id'];
+            }
+
+            // Запись должна существовать, возвращаем placeholder ID
+            return 'existing_' . md5($zoneId . $type . $name);
+        }
+
+        // Другие ошибки - выбрасываем исключение
+        throw new Exception('Cloudflare API Error: ' . json_encode($errors));
+    }
+
+    /**
+     * Find existing DNS record
+     */
+    public function findRecord(string $zoneId, string $type, string $name): ?array
+    {
+        try {
+            $records = $this->getRecords($zoneId);
+            
+            foreach ($records as $record) {
+                if ($record['type'] === strtoupper($type) && $record['name'] === $name) {
+                    return $record;
+                }
+            }
+            
+            return null;
+        } catch (Exception $e) {
+            Log::warning('Failed to find record', [
+                'zone_id' => $zoneId,
+                'type' => $type,
+                'name' => $name,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
     }
 
     public function updateRecord(
-        string $zoneId, 
-        string $recordId, 
-        string $type, 
-        string $name, 
-        string $content, 
-        int $ttl = 300, 
+        string $zoneId,
+        string $recordId,
+        string $type,
+        string $name,
+        string $content,
+        int $ttl = 300,
         bool $proxied = true
     ): bool {
         $data = [
@@ -246,10 +340,10 @@ class CloudflareService implements DnsServiceInterface
         try {
             $result = $this->request('get', "/zones/{$zoneId}/ssl/certificate_packs?status=all");
             $certs = $result['result'] ?? [];
-            
+
             $activeCerts = [];
             $pendingCerts = [];
-            
+
             foreach ($certs as $cert) {
                 $certInfo = [
                     'id' => $cert['id'] ?? null,
@@ -257,14 +351,14 @@ class CloudflareService implements DnsServiceInterface
                     'status' => $cert['status'] ?? 'unknown',
                     'hosts' => $cert['hosts'] ?? [],
                 ];
-                
+
                 if ($cert['status'] === 'active') {
                     $activeCerts[] = $certInfo;
                 } else {
                     $pendingCerts[] = $certInfo;
                 }
             }
-            
+
             return [
                 'has_active' => !empty($activeCerts),
                 'active' => $activeCerts,
@@ -294,18 +388,18 @@ class CloudflareService implements DnsServiceInterface
         try {
             // First check SSL mode
             $sslMode = $this->getSslMode($zoneId);
-            
+
             if ($sslMode === 'off') {
                 return 'none';
             }
 
             // Check certificate status
             $certs = $this->getEdgeCertificates($zoneId);
-            
+
             if ($certs['has_active']) {
                 return 'active';
             }
-            
+
             if (!empty($certs['pending'])) {
                 return 'pending';
             }
@@ -325,7 +419,7 @@ class CloudflareService implements DnsServiceInterface
         try {
             $mode = $this->getSslMode($zoneId);
             $certs = $this->getEdgeCertificates($zoneId);
-            
+
             return [
                 'mode' => $mode,
                 'certificates' => $certs,
@@ -439,7 +533,7 @@ class CloudflareService implements DnsServiceInterface
     public function getZoneDetails(string $zoneId): array
     {
         $result = $this->request('get', "/zones/{$zoneId}");
-        
+
         return [
             'id' => $result['result']['id'],
             'name' => $result['result']['name'],
