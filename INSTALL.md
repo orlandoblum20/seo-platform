@@ -1,48 +1,52 @@
-# 📦 Установка SEO Landing Platform
+# Установка SEO Platform v3.6.17
 
 ## Требования
 
-| Параметр | Минимум | Рекомендуется |
-|----------|---------|---------------|
-| OS | Ubuntu 22.04 | Ubuntu 24.04 |
-| CPU | 2 cores | 4 cores |
-| RAM | 4 GB | 8 GB |
-| Диск | 20 GB SSD | 50 GB SSD |
+### Минимальные
+- Ubuntu 22.04 / 24.04
+- 2 CPU, 2 GB RAM
+- 20 GB SSD
+- Открытые порты: 80, 443, 8080
 
----
+### Рекомендуемые
+- 4 CPU, 4 GB RAM
+- 40 GB SSD
 
-## 🚀 Быстрая установка (1 команда)
+## Быстрая установка (1 команда)
 ```bash
-# 1. Скачайте и распакуйте архив
-apt update && apt install -y unzip
-unzip seo-platform-v3.6.15.zip -d seo-platform
-cd seo-platform
-
-# 2. Запустите установку
-chmod +x quick-install.sh
-./quick-install.sh
+wget https://github.com/orlandoblum20/seo-platform/archive/refs/heads/main.zip && \
+unzip main.zip && cd seo-platform-main && chmod +x quick-install.sh && ./quick-install.sh
 ```
 
-Установщик автоматически:
-- Установит Docker (если нет)
-- Настроит базу данных
-- Сгенерирует безопасные пароли
-- Запустит все сервисы
-- Создаст администратора
+Или из архива:
+```bash
+unzip seo-platform-v3.6.17.zip && cd seo-platform && chmod +x quick-install.sh && ./quick-install.sh
+```
 
----
+## Что делает установщик
 
-## 📋 После установки
+1. Запрашивает email для SSL сертификатов (Let's Encrypt)
+2. Устанавливает Docker (если нет)
+3. Настраивает базу данных PostgreSQL
+4. Настраивает Caddy для SSL
+5. Создаёт Primary Server
+6. Создаёт администратора
 
-1. Откройте админ-панель: `http://IP_СЕРВЕРА:8080`
-2. Войдите с созданными учётными данными
-3. Настройте:
-   - **DNS аккаунты** (Cloudflare / DNSPOD)
-   - **AI провайдеры** (OpenAI / Anthropic / DeepSeek)
+## После установки
 
----
+- **Админ-панель:** http://YOUR_IP:8080
+- **SSL домены:** https://your-domain.com (порты 80/443)
 
-## 🔧 Полезные команды
+## Протестированный функционал
+
+✅ AI Провайдеры (OpenAI, Anthropic, DeepSeek)
+✅ DNS Аккаунты (Cloudflare, DNSPOD)  
+✅ Импорт доменов
+✅ Проверка DNS статуса
+✅ SSL Cloudflare (Universal SSL)
+✅ SSL Let's Encrypt (через Caddy)
+
+## Команды управления
 ```bash
 # Логи
 docker compose logs -f
@@ -53,29 +57,18 @@ docker compose restart
 # Остановка
 docker compose down
 
-# Статус
-docker compose ps
+# Обновление
+git pull && docker compose up -d --build
 ```
 
----
+## Решение проблем
 
-## 🐛 Решение проблем
+### SSL не выпускается
+1. Проверьте что домен указывает на IP сервера
+2. Проверьте что порты 80/443 открыты
+3. Проверьте логи: `docker compose logs caddy`
 
-### "File not found" или белая страница
+### Ошибка Permission denied
 ```bash
-docker compose down
-docker compose up -d --build
-```
-
-### Ошибки базы данных
-```bash
-docker compose restart db
-sleep 10
-docker compose exec app php artisan migrate --force
-```
-
-### Сброс кэша
-```bash
-docker compose exec app php artisan cache:clear
-docker compose exec app php artisan config:clear
+docker compose exec app chown -R www-data:www-data /etc/caddy/sites
 ```

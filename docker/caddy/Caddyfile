@@ -1,0 +1,13 @@
+
+{
+
+    admin 0.0.0.0:2019
+
+    email persekutuanwilayah206@gmail.com
+
+}
+
+# Import all site configs
+
+import /etc/caddy/sites/*.caddy
+

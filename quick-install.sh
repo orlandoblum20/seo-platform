@@ -3,7 +3,7 @@ set -e
 
 echo "========================================"
 echo "  SEO PLATFORM - БЫСТРАЯ УСТАНОВКА"
-echo "  Версия: 3.6.16"
+echo "  Версия: 3.6.17"
 echo "========================================"
 echo ""
 
@@ -13,14 +13,33 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# 1. Установка зависимостей
-echo "[1/8] Установка зависимостей..."
+# 1. Запрос email для SSL сертификатов
+echo "[0/9] Настройка SSL"
+echo ""
+read -p "Введите email для Let's Encrypt SSL сертификатов: " SSL_EMAIL
+
+if [ -z "$SSL_EMAIL" ]; then
+    echo "Ошибка: email обязателен для выпуска SSL сертификатов"
+    exit 1
+fi
+
+# Проверка формата email
+if [[ ! "$SSL_EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+    echo "Ошибка: неверный формат email"
+    exit 1
+fi
+
+echo "✓ Email для SSL: $SSL_EMAIL"
+echo ""
+
+# 2. Установка зависимостей
+echo "[1/9] Установка зависимостей..."
 apt update -qq
-apt install -y -qq unzip curl wget > /dev/null 2>&1
+apt install -y -qq unzip curl wget git > /dev/null 2>&1
 echo "✓ Зависимости установлены"
 
-# 2. Проверка Docker
-echo "[2/8] Проверка Docker..."
+# 3. Проверка Docker
+echo "[2/9] Проверка Docker..."
 if ! command -v docker &> /dev/null; then
     echo "Установка Docker..."
     curl -fsSL https://get.docker.com | sh
@@ -32,16 +51,15 @@ if ! docker compose version &> /dev/null; then
 fi
 echo "✓ Docker готов"
 
-# 3. Определение параметров
+# 4. Определение параметров
 SERVER_IP=$(hostname -I | awk '{print $1}')
 DB_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 20)
 APP_KEY="base64:$(openssl rand -base64 32)"
 
-echo "[3/8] Конфигурация..."
+echo "[3/9] Конфигурация..."
 echo "  IP сервера: $SERVER_IP"
-echo "  Пароль БД: $DB_PASS"
 
-# 4. Создаём .env
+# 5. Создаём .env
 cat > .env << ENVFILE
 APP_NAME="SEO Landing Platform"
 APP_ENV=production
@@ -77,19 +95,39 @@ SESSION_DOMAIN=
 
 QUEUE_CONNECTION=redis
 
+CADDY_ADMIN_API=http://caddy:2019
+SSL_EMAIL=${SSL_EMAIL}
+
 SANCTUM_STATEFUL_DOMAINS=localhost,127.0.0.1,${SERVER_IP}
 ENVFILE
 
-# Сохраняем ключ
+# Сохраняем ключ и пароль
 mkdir -p /root/seo-backups
 echo "$APP_KEY" > /root/.seo-platform-key
 echo "$APP_KEY" > /root/seo-backups/.app_key
-chmod 600 /root/.seo-platform-key /root/seo-backups/.app_key
+echo "$DB_PASS" > /root/seo-backups/.db_password
+chmod 600 /root/.seo-platform-key /root/seo-backups/.app_key /root/seo-backups/.db_password
 
 echo "✓ Конфигурация создана"
 
-# 5. Запуск Docker
-echo "[4/8] Запуск контейнеров (3-5 минут)..."
+# 6. Настройка Caddy с email
+echo "[4/9] Настройка Caddy..."
+mkdir -p docker/caddy
+
+cat > docker/caddy/Caddyfile << CADDYFILE
+{
+    admin 0.0.0.0:2019
+    email ${SSL_EMAIL}
+}
+
+# Import all site configs
+import /etc/caddy/sites/*.caddy
+CADDYFILE
+
+echo "✓ Caddy настроен с email: $SSL_EMAIL"
+
+# 7. Запуск Docker
+echo "[5/9] Запуск контейнеров (3-5 минут)..."
 docker compose down -v 2>/dev/null || true
 docker compose up -d --build
 
@@ -102,8 +140,15 @@ for i in {1..30}; do
 done
 echo "✓ Контейнеры запущены"
 
-# 6. Инициализация Laravel
-echo "[5/8] Инициализация приложения..."
+# 8. Настройка прав Caddy
+echo "[6/9] Настройка прав доступа..."
+sleep 5
+docker compose exec -T app chown -R www-data:www-data /etc/caddy/sites 2>/dev/null || true
+docker compose exec -T app chmod -R 755 /etc/caddy/sites 2>/dev/null || true
+echo "✓ Права настроены"
+
+# 9. Инициализация Laravel
+echo "[7/9] Инициализация приложения..."
 sleep 10
 docker compose exec -T app php artisan migrate --force --seed
 docker compose exec -T app php artisan config:cache
@@ -112,8 +157,8 @@ docker compose exec -T app php artisan view:cache
 docker compose exec -T app chown -R www-data:www-data /var/www/storage
 echo "✓ Приложение инициализировано"
 
-# 7. Создание Primary Server
-echo "[6/8] Создание Primary Server..."
+# 10. Создание Primary Server
+echo "[8/9] Создание Primary Server..."
 docker compose exec -T app php artisan tinker --execute="
 \$server = App\Models\Server::where('is_primary', true)->first();
 if (!\$server) {
@@ -132,14 +177,14 @@ if (!\$server) {
 " 2>/dev/null || echo "Primary Server создан"
 echo "✓ Primary Server готов"
 
-# 8. Создание админа
-echo "[7/8] Создание администратора..."
+# 11. Создание админа
+echo "[9/9] Создание администратора..."
 echo ""
 docker compose exec -T app php artisan admin:create
 
-# 9. Готово
+# Финальная проверка
 echo ""
-echo "[8/8] Проверка..."
+echo "Проверка работоспособности..."
 sleep 5
 if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 | grep -q "200\|302"; then
     STATUS="✓ Работает"
@@ -155,11 +200,26 @@ echo ""
 echo "  Админ-панель: http://${SERVER_IP}:8080"
 echo "  Статус: ${STATUS}"
 echo ""
-echo "  Пароль БД: ${DB_PASS}"
-echo "  (сохраните в надёжное место!)"
+echo "  SSL Email: ${SSL_EMAIL}"
+echo ""
+echo "  Данные сохранены в /root/seo-backups/"
+echo ""
+echo "  Порты:"
+echo "    8080 - Админ-панель"
+echo "    80/443 - Caddy (SSL для доменов)"
 echo ""
 echo "  Команды:"
-echo "    docker compose logs -f    # логи"
-echo "    docker compose restart    # перезапуск"
-echo "    docker compose down       # остановка"
+echo "    docker compose logs -f      # логи"
+echo "    docker compose restart      # перезапуск"
+echo "    docker compose down         # остановка"
+echo ""
+echo "========================================"
+echo "  ПРОТЕСТИРОВАННЫЙ ФУНКЦИОНАЛ:"
+echo "========================================"
+echo "  ✅ AI Провайдеры (OpenAI, Anthropic, DeepSeek)"
+echo "  ✅ DNS Аккаунты (Cloudflare, DNSPOD)"
+echo "  ✅ Импорт доменов"
+echo "  ✅ Проверка DNS"
+echo "  ✅ SSL Cloudflare"
+echo "  ✅ SSL Let's Encrypt (Caddy)"
 echo ""

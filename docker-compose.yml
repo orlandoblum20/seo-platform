@@ -9,9 +9,11 @@ services:
     volumes:
       - ./storage:/var/www/storage
       - app-public:/var/www/public
+      - caddy-sites:/etc/caddy/sites
     environment:
       - APP_ENV=${APP_ENV:-production}
       - APP_DEBUG=${APP_DEBUG:-false}
+      - CADDY_ADMIN_API=http://caddy:2019
     depends_on:
       db:
         condition: service_healthy
@@ -31,6 +33,23 @@ services:
       - app-public:/var/www/public:ro
     depends_on:
       - app
+    networks:
+      - seo-network
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: seo-platform-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-sites:/etc/caddy/sites
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - CADDY_ADMIN=0.0.0.0:2019
     networks:
       - seo-network
 
@@ -77,6 +96,9 @@ services:
     command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
     volumes:
       - ./storage:/var/www/storage
+      - caddy-sites:/etc/caddy/sites
+    environment:
+      - CADDY_ADMIN_API=http://caddy:2019
     depends_on:
       db:
         condition: service_healthy
@@ -111,3 +133,6 @@ volumes:
   db-data:
   redis-data:
   app-public:
+  caddy-sites:
+  caddy-data:
+  caddy-config:
