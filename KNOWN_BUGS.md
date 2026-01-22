@@ -177,3 +177,15 @@ unzip -l seo-platform-vX.X.X.zip | grep "\.env$"
 **Причина:** На чистой Ubuntu нет unzip
 **Решение:** Добавить установку в quick-install.sh
 **Файл:** `quick-install.sh`
+
+### 13. Cloudflare ошибка 81058 при повторном импорте (ИСПРАВЛЕНО v3.6.16)
+**Симптом:** "An identical record already exists" при импорте ранее удалённого домена
+**Причина:** DNS запись осталась от предыдущего добавления домена
+**Решение:** Обрабатывать код 81058 как успех, находить существующую запись
+**Файл:** `app/Services/DNS/CloudflareService.php`
+
+### 14. "No server IP available" при импорте доменов (ИСПРАВЛЕНО v3.6.16)
+**Симптом:** Server error при попытке импорта доменов
+**Причина:** Не создан Primary Server при установке
+**Решение:** Создавать Primary Server автоматически или через artisan
+**Команда:** `php artisan server:create-primary` или через tinker

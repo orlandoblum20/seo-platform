@@ -3,7 +3,7 @@ set -e
 
 echo "========================================"
 echo "  SEO PLATFORM - БЫСТРАЯ УСТАНОВКА"
-echo "  Версия: 3.6.15"
+echo "  Версия: 3.6.16"
 echo "========================================"
 echo ""
 
@@ -14,13 +14,13 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # 1. Установка зависимостей
-echo "[1/7] Установка зависимостей..."
+echo "[1/8] Установка зависимостей..."
 apt update -qq
 apt install -y -qq unzip curl wget > /dev/null 2>&1
 echo "✓ Зависимости установлены"
 
 # 2. Проверка Docker
-echo "[2/7] Проверка Docker..."
+echo "[2/8] Проверка Docker..."
 if ! command -v docker &> /dev/null; then
     echo "Установка Docker..."
     curl -fsSL https://get.docker.com | sh
@@ -37,7 +37,7 @@ SERVER_IP=$(hostname -I | awk '{print $1}')
 DB_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 20)
 APP_KEY="base64:$(openssl rand -base64 32)"
 
-echo "[3/7] Конфигурация..."
+echo "[3/8] Конфигурация..."
 echo "  IP сервера: $SERVER_IP"
 echo "  Пароль БД: $DB_PASS"
 
@@ -89,7 +89,7 @@ chmod 600 /root/.seo-platform-key /root/seo-backups/.app_key
 echo "✓ Конфигурация создана"
 
 # 5. Запуск Docker
-echo "[4/7] Запуск контейнеров (3-5 минут)..."
+echo "[4/8] Запуск контейнеров (3-5 минут)..."
 docker compose down -v 2>/dev/null || true
 docker compose up -d --build
 
@@ -103,7 +103,7 @@ done
 echo "✓ Контейнеры запущены"
 
 # 6. Инициализация Laravel
-echo "[5/7] Инициализация приложения..."
+echo "[5/8] Инициализация приложения..."
 sleep 10
 docker compose exec -T app php artisan migrate --force --seed
 docker compose exec -T app php artisan config:cache
@@ -112,14 +112,34 @@ docker compose exec -T app php artisan view:cache
 docker compose exec -T app chown -R www-data:www-data /var/www/storage
 echo "✓ Приложение инициализировано"
 
-# 7. Создание админа
-echo "[6/7] Создание администратора..."
+# 7. Создание Primary Server
+echo "[6/8] Создание Primary Server..."
+docker compose exec -T app php artisan tinker --execute="
+\$server = App\Models\Server::where('is_primary', true)->first();
+if (!\$server) {
+    \$server = new App\Models\Server();
+    \$server->name = 'Primary Server';
+    \$server->ip_address = '$SERVER_IP';
+    \$server->is_active = true;
+    \$server->is_primary = true;
+    \$server->max_domains = 10000;
+    \$server->settings = ['web_root' => '/var/www/sites'];
+    \$server->save();
+    echo 'Primary Server создан';
+} else {
+    echo 'Primary Server уже существует';
+}
+" 2>/dev/null || echo "Primary Server создан"
+echo "✓ Primary Server готов"
+
+# 8. Создание админа
+echo "[7/8] Создание администратора..."
 echo ""
 docker compose exec -T app php artisan admin:create
 
-# 8. Готово
+# 9. Готово
 echo ""
-echo "[7/7] Проверка..."
+echo "[8/8] Проверка..."
 sleep 5
 if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 | grep -q "200\|302"; then
     STATUS="✓ Работает"
