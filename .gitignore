@@ -1,14 +1,86 @@
-/vendor
-/node_modules
+###################################
+# SEO Platform - .gitignore
+###################################
+
+# Laravel specific
+/vendor/
+/node_modules/
+/public/build/
+/public/hot
+/storage/*.key
+/storage/debugbar/
+/storage/logs/*
+!/storage/logs/.gitkeep
+/storage/framework/cache/data/*
+!/storage/framework/cache/data/.gitkeep
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitkeep
+/storage/framework/views/*
+!/storage/framework/views/.gitkeep
+
+# Environment files - НИКОГДА не коммитить!
 .env
 .env.backup
-/storage/*.key
-/storage/logs/*
-/storage/framework/cache/*
-/storage/framework/sessions/*
-/storage/framework/views/*
-/public/build
-/public/hot
-*.log
+.env.production
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
 .DS_Store
+.DS_Store?
 Thumbs.db
+._*
+
+# Compiled files
+*.css.map
+*.js.map
+*.sass-cache
+
+# npm/yarn debugging
+npm-debug.log
+yarn-error.log
+
+# Testing
+.phpunit.result.cache
+coverage/
+/phpunit.xml
+!/phpunit.xml.dist
+
+# Backup files
+*.bak
+*.sql
+*.sql.gz
+*.tar.gz
+*.zip
+
+# Docker volumes (local)
+docker/caddy/sites/
+
+# Secrets - НИКОГДА не коммитить!
+/root/.seo-platform-key
+*.pem
+*.key
+!.gitkeep
+
+# Local development
+/storage/app/sites/*
+!/storage/app/sites/.gitkeep
+
+# Composer
+composer.lock
+auth.json
+
+# Misc
+Homestead.json
+Homestead.yaml
+.phpstorm.meta.php
+_ide_helper.php
+_ide_helper_models.php
+.php-cs-fixer.cache

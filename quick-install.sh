@@ -3,7 +3,7 @@ set -e
 
 echo "========================================"
 echo "  SEO PLATFORM - БЫСТРАЯ УСТАНОВКА"
-echo "  Версия: 3.6.17"
+echo "  Версия: 3.6.18"
 echo "========================================"
 echo ""
 
@@ -49,6 +49,22 @@ if ! docker compose version &> /dev/null; then
     echo "Ошибка: Docker Compose не найден"
     exit 1
 fi
+
+# Настройка Docker на IPv4 (решение проблемы IPv6 unreachable)
+echo "  Настройка Docker на IPv4..."
+mkdir -p /etc/docker
+if [ ! -f /etc/docker/daemon.json ]; then
+    cat > /etc/docker/daemon.json << 'DOCKERCONF'
+{
+  "ipv6": false,
+  "ip6tables": false,
+  "dns": ["8.8.8.8", "8.8.4.4"]
+}
+DOCKERCONF
+    systemctl restart docker 2>/dev/null || true
+    sleep 2
+fi
+
 echo "✓ Docker готов"
 
 # 4. Определение параметров

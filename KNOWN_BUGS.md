@@ -97,6 +97,18 @@
 **Решение:** Использование Content-Type: text/caddyfile для reload
 **Файл:** `app/Services/SSL/CaddyManager.php`
 
+### BUG-019: unzip не установлен на чистом сервере (ИСПРАВЛЕНО v3.6.18)
+**Симптом:** unzip: command not found при распаковке архива
+**Причина:** На чистой Ubuntu 24.04 unzip отсутствует
+**Решение:** Добавлена инструкция в INSTALL.md, предустановка перед распаковкой
+**Команда:** `apt update && apt install -y unzip`
+
+### BUG-020: Docker IPv6 network unreachable (ИСПРАВЛЕНО v3.6.18)
+**Симптом:** dial tcp [2600:...]:443: connect: network is unreachable
+**Причина:** Docker пытается использовать IPv6 для Docker Hub, но IPv6 недоступен
+**Решение:** Автоматическая настройка /etc/docker/daemon.json в quick-install.sh
+**Файл:** `quick-install.sh`, `/etc/docker/daemon.json`
+
 ---
 
 ## Текущие известные ограничения
